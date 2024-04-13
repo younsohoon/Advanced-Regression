@@ -1,0 +1,68 @@
+---
+title: "Model_comparison"
+author: "Sohoon Youn"
+date: "2023-04-13"
+output: html_document
+---
+```{r echo = FALSE}
+dat2 = dat # dat2 w/o outliers
+ow = which(dat2$weight > 4.5)
+oh = which(dat2$height < 22 | dat2$height >80)
+dat2 = dat2[-c(ow, oh),]
+```
+
+
+```{r include = FALSE}
+kfold = function(n){
+  k = 10
+  data = dat
+  predictors = names(data)[2:ncol(data)]
+  response = names(data)[1]
+  
+  set.seed(777) 
+  folds = createFolds(data$los, k)
+  dat = data[-folds[[n]], ]
+  dtest = data[folds[[n]], ]
+  
+  set.seed(777) 
+  fit = gam(los ~ s(weight) + s(height) + s(heartrate_mean) + ti(weight, height),
+            data = dat) # 16.44 ss
+  pred = predict(fit, newdata=dtest) 
+  res = data.frame(Id=folds[[n]], los=pred)
+  return(sqrt(mean((res$los - dtest$los)^2)))
+}
+
+
+cv_score = 0
+for (i in 1:10){
+  cv_score = kfold(i) + cv_score
+}
+cv_score/10
+```
+
+```{r include = FALSE}
+# lm model
+kfold = function(n){
+  k = 10
+  data = dat
+  predictors = names(data)[2:ncol(data)]
+  response = names(data)[1]
+  
+  set.seed(777) 
+  folds = createFolds(data$los, k)
+  dat = data[-folds[[n]], ]
+  dtest = data[folds[[n]], ]
+  
+  set.seed(777) 
+  m1 = lm((los)^(1/2)~weight+height+weight*height+heartrate_mean,data=dat) 
+  pred = predict(m1, newdata=dtest) 
+  res = data.frame(Id=folds[[n]], los=pred)
+  return(sqrt(mean((res$los^2 - dtest$los)^2)))
+}
+
+cv_score = 0
+for (i in 1:10){
+  cv_score = kfold(i) + cv_score
+}
+cv_score/10
+```

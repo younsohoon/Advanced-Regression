@@ -1,0 +1,89 @@
+---
+title: "Statistical Analysis - Lasso"
+author: "Sohoon Youn"
+date: "2023-04-13"
+output: html_document
+---
+
+## 4-a. Tuned parameter by k-fold Cross-Validation 
+
+```{r inclue = TRUE, warning=FALSE}
+X = data.frame(dat$weight, dat$height, dat$height*dat$weight, dat$heartrate_mean)
+X = as.matrix(X)
+Y = (dat$los)^(1/2)
+```
+
+X is a matrix of predictor variables and Y is a vector of response variable values. They are defined to build a lasso regression. Since lasso regression is a modified linear regression and linear regression is a subset of smoothing splines, the same predictors with the smoothing spline are fitted with this model for comparison to the smoothing spline. 
+
+```{r inclue = TRUE, warning=FALSE}
+set.seed(777)
+lasso_mod = cv.glmnet(X, Y, alpha = 1, nfolds = 10) 
+```
+
+A lasso regression is fitted with X and Y. `alpha` is a value between 0 and 1 that determines the type of regularization, and `nfolds` is the number of folds to use in cross-validation. When alpha = 1, Lasso regression is performed while Ridge regression is performed when alpha = 0. And the lasso regression is trained using `cv.glmnet()` function.
+
+## 4-b. Build a Lasso regression
+```{r inclue = TRUE, warning=FALSE}
+set.seed(777)
+bestlam = lasso_mod$lambda.min 
+# Fit the final Lasso model using the best lambda value
+final_lasso = glmnet(X, Y, alpha = 1, lambda = bestlam)
+bestlam
+```
+The value of `bestlam` is  0.0005592371. This value is obtained by performing cross-validation on the Lasso regression model using the training data. The value of `bestlam` is chosen such that it minimizes the mean squared error (MSE) of the model on the training data. Once `bestlam` is obtained, a new Lasso regression model is trained using all of the training data and this value of `bestlam`. The resulting model is then used to make predictions on the test data. 
+
+Since $\lambda$,`bestlam`, is too small, it means that it has very little shrinkage and those estimates are expected to approximately equal to the one found with linear regression. Therefore, this data is fitted with linear regression for comparison. 
+
+Here is the linear model for this data. 
+
+    m1 = lm((los)^(1/2)~weight+height+weight*height+heartrate_mean,data=dat)
+
+## 4-c. Build a linear regression 
+```{r echo = FALSE, warning=FALSE}
+dat0 = data.frame(dat$los,dat$weight,dat$height,dat$heartrate_mean)
+names(dat0) = c("los","weight","height","heartrate_mean")
+
+m1 = lm((los)^(1/2)~weight+height+weight*height+heartrate_mean,data=dat)
+```
+
+The linear model is built. It is fitted with the same features for comparison. 
+   
+```{r echo = FALSE, warning=FALSE}
+lassobeta = data.frame(as.matrix(final_lasso$beta))
+m1beta = data.frame(m1$coefficients)
+names(m1beta) = c("ols_coefficients")
+names(lassobeta) = c("lasso_coefficients")
+
+kable(m1beta) %>% 
+  kable_styling(position = "center", latex_options = "HOLD_position")
+kable(lassobeta) %>% 
+  kable_styling(position = "center", latex_options = "HOLD_position")
+``` 
+
+According to those tables, two models approximately got the same coefficients. Therefore, they are expected to have the similar cross validation score. 
+
+## 4-d. Model evaluation using K-fold cross-validation
+```{r inclue = TRUE, warning=FALSE}
+kfold = function(n){
+  k = 10
+  data = dat0
+  
+  set.seed(777) 
+  folds = createFolds(data$los, k)
+  dat = data[-folds[[n]], ]
+  dtest = data[folds[[n]], ]
+  
+  set.seed(777) 
+  m1 = lm((los)^(1/2)~weight+height+weight*height+heartrate_mean,data=dat)
+  pred = predict(m1, newdata=dtest)
+  res = data.frame(Id=folds[[n]], los=pred)
+  return(sqrt(mean((res$los^2 - dtest$los)^2)))
+}
+
+cv_score = 0
+for (i in 1:10){
+  cv_score = kfold(i) + cv_score
+}
+cv_score/10
+```
+The resulting cross-validation MSE score is around 18.9.
